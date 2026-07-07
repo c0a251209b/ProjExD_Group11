@@ -24,6 +24,8 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 WIDTH, HEIGHT = 1100, 700
 FPS = 60
+TITLE = "title" #タイトル
+PLAYING = "playing" #プレイ中
 
 # 色の定義
 SAND = (231, 211, 151)
@@ -428,6 +430,14 @@ def draw_level_up_menu(screen: pg.Surface, font: pg.font.Font, small_font: pg.fo
         screen.blit(image, image.get_rect(center=(WIDTH // 2, panel.y + 100 + index * 43)))
 
 
+def draw_title_screen(screen: pg.Surface, title_img: pg.Surface,) -> None:
+    """タイトル画面の画像を表示する。"""
+    
+    # title_imgを画面の左上から表示する。
+    # 画像はmain()内でWIDTH × HEIGHTに拡大している。
+    screen.blit(title_img, (0, 0))
+
+
 def main() -> None:
     """ゲームを初期化し，メインループを実行する。"""
     pg.init()
@@ -437,7 +447,13 @@ def main() -> None:
 
     font = pg.font.Font(None, 27)
     small_font = pg.font.Font(None, 20)
-    large_font = pg.font.Font(None, 56)
+    
+    # タイトル画面用の画像を読み込む。
+    # convert()により，画面表示を高速化する。
+    title_img = pg.image.load("fig/title_screen.png").convert()
+    
+    # タイトル画像をゲーム画面と同じサイズに変更する。
+    title_img = pg.transform.scale(title_img, (WIDTH, HEIGHT))
 
     player = Player()
     enemies = [
@@ -451,6 +467,7 @@ def main() -> None:
     texts: list[FloatingText] = []
     defeated_count = 0
     game_over = False
+    game_state = TITLE
     running = True
 
     while running:
@@ -466,41 +483,79 @@ def main() -> None:
                 if event.key == pg.K_ESCAPE:
                     running = False
 
-                # レベルアップ選択中は，能力・スキルの選択だけを受け付ける。
-                elif player.choosing_level_up:
-                    result = player.choose_level_up(event.key - pg.K_0)
-                    if result:
-                        texts.append(FloatingText(result, player.rect.midtop, GUN_YELLOW))
+                # タイトル画面ではENTERキーだけでゲームを開始する。
+                elif game_state == TITLE:
+                    if event.key == pg.K_RETURN:
+                        game_state = PLAYING
 
-                elif not game_over:
-                    # Kキー：近接攻撃
-                    if event.key == pg.K_k:
-                        hitbox = player.try_melee_attack()
-                        if hitbox:
-                            for enemy in enemies[:]:
-                                if hitbox.colliderect(enemy.rect):
-                                    enemy.hp -= player.attack
-                                    texts.append(FloatingText(f"-{player.attack}", enemy.rect.midtop, WHITE))
+                # プレイ中だけ攻撃，射撃，レベルアップ選択などを受け付ける。
+                elif game_state == PLAYING:
+                    if player.choosing_level_up:
+                        result = player.choose_level_up(event.key - pg.K_0)
+                        if result:
+                            texts.append(
+                                FloatingText(
+                                    result,
+                                    player.rect.midtop,
+                                    GUN_YELLOW,
+                                )
+                            )
 
-                    # Jキー：銃を撃つ
-                    elif event.key == pg.K_j:
-                        bullet = player.try_shoot()
-                        if bullet:
-                            bullets.append(bullet)
-                        else:
-                            texts.append(FloatingText("No Ammo", player.rect.midtop, MP_BLUE))
+                    else:
+                        # Kキー：近接攻撃
+                        if event.key == pg.K_k:
+                            hitbox = player.try_melee_attack()
 
-                    # Rキー：リロード
-                    elif event.key == pg.K_r:
-                        if player.reload():
-                            texts.append(FloatingText("Reloaded", player.rect.midtop, MP_BLUE))
+                            if hitbox:
+                                for enemy in enemies[:]:
+                                    if hitbox.colliderect(enemy.rect):
+                                        enemy.hp -= player.attack
+                                        texts.append(
+                                            FloatingText(
+                                                f"-{player.attack}",
+                                                enemy.rect.midtop,
+                                                WHITE,
+                                            )
+                                        )
 
-                    # Lキー：習得後の回復スキル
-                    elif event.key == pg.K_l:
-                        if player.use_heal_skill():
-                            texts.append(FloatingText("+35 HP", player.rect.midtop, (125, 255, 150)))
+                        # Jキー：銃を撃つ
+                        elif event.key == pg.K_j:
+                            bullet = player.try_shoot()
 
-        if not game_over and not player.choosing_level_up:
+                            if bullet:
+                                bullets.append(bullet)
+                            else:
+                                texts.append(
+                                    FloatingText(
+                                        "No Ammo",
+                                        player.rect.midtop,
+                                        MP_BLUE,
+                                    )
+                                )
+
+                        # Rキー：リロード
+                        elif event.key == pg.K_r:
+                            if player.reload():
+                                texts.append(
+                                    FloatingText(
+                                        "Reloaded",
+                                        player.rect.midtop,
+                                        MP_BLUE,
+                                    )
+                                )
+
+                        # Lキー：回復スキル
+                        elif event.key == pg.K_l:
+                            if player.use_heal_skill():
+                                texts.append(
+                                    FloatingText(
+                                        "+35 HP",
+                                        player.rect.midtop,
+                                        (125, 255, 150),
+                                    )
+                                )
+
+        if (game_state == PLAYING and not game_over and not player.choosing_level_up):
             # 2. プレイヤー，敵，弾丸，メッセージを更新する。
             keys = pg.key.get_pressed()
             player.update(dt, keys)
@@ -582,7 +637,11 @@ def main() -> None:
             subtitle = font.render("Press ESC to quit.", True, WHITE)
             screen.blit(title, title.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 20)))
             screen.blit(subtitle, subtitle.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 30)))
-
+        # タイトル画面のときは，ゲーム画面の上にタイトル画像を表示する。
+        # 最後に描画することで，背景・敵・GUIを完全に隠す。
+        if game_state == TITLE:
+            draw_title_screen(screen, title_img)
+            
         pg.display.update()
 
     pg.quit()
