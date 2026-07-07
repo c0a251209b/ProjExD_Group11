@@ -40,6 +40,7 @@ EXP_GREEN = (157, 205, 53)
 GUN_YELLOW = (229, 183, 52)
 PLAYER_BLUE = (45, 108, 196)
 ONIGIRI_WHITE = (245, 244, 234)
+ONIGIRI_BROWN = (223,169,67)
 NORI_BLACK = (40, 45, 45)
 BULLET_ORANGE = (250, 154, 48)
 WHITE = (255, 255, 255)
@@ -299,6 +300,113 @@ class OnigiriEnemy:
         pg.draw.rect(screen, HP_RED, (bar.x, bar.y, width, bar.height))
 
 
+class YakiOnigiriEnemy:
+    """プレイヤーを追跡して攻撃するおにぎり型の敵クラス。"""
+
+    def __init__(self, pos: tuple[int, int]) -> None:
+        self.rect = pg.Rect(pos[0], pos[1], 38, 34)
+        self.max_hp = 30
+        self.hp = self.max_hp
+        self.speed = 100
+        self.attack = 16
+        self.attack_timer = 1.3
+        self.exp_reward = 35
+
+    def update(self, dt: float, player: Player) -> int:
+        """プレイヤーを追跡し，攻撃した場合はダメージを返す。"""
+        to_player = pg.Vector2(player.rect.center) - pg.Vector2(self.rect.center)
+        distance = to_player.length()
+
+        if 42 < distance < 250:
+            direction = to_player.normalize()
+            self.rect.x += round(direction.x * self.speed * dt)
+            self.rect.y += round(direction.y * self.speed * dt)
+
+        self.attack_timer -= dt
+        if distance <= 44 and self.attack_timer <= 0:
+            self.attack_timer = 0.85
+            return self.attack
+        return 0
+
+    def draw(self, screen: pg.Surface) -> None:
+        """おにぎり敵とHPバーを描画する。"""
+        pg.draw.ellipse(screen, (54, 44, 64), (self.rect.x, self.rect.bottom - 7, 38, 12))
+
+        # 三角形のおにぎり本体
+        points = [
+            (self.rect.centerx, self.rect.y),
+            (self.rect.right, self.rect.bottom),
+            (self.rect.left, self.rect.bottom),
+        ]
+        pg.draw.polygon(screen, ONIGIRI_BROWN, points)
+        pg.draw.polygon(screen, BLACK, points, 2)
+
+        # のりと目
+        pg.draw.rect(screen, NORI_BLACK, (self.rect.centerx , self.rect.bottom - 1, 3, 4), border_radius=2)
+        pg.draw.circle(screen, BLACK, (self.rect.centerx - 6, self.rect.centery + 2), 2)
+        pg.draw.circle(screen, BLACK, (self.rect.centerx + 6, self.rect.centery + 2), 2)
+
+        # 敵HPバー
+        bar = pg.Rect(self.rect.x, self.rect.y - 10, self.rect.width, 5)
+        pg.draw.rect(screen, UI_DARK, bar)
+        width = int(bar.width * max(0, self.hp) / self.max_hp)
+        pg.draw.rect(screen, HP_RED, (bar.x, bar.y, width, bar.height))
+
+
+class OmuraisuEnemy:
+    """プレイヤーを追跡して攻撃するおにぎり型の敵クラス。"""
+
+    def __init__(self, pos: tuple[int, int]) -> None:
+        self.rect = pg.Rect(pos[0], pos[1], 38, 34)
+        self.max_hp = random.randint(80, 100)
+        self.hp = self.max_hp
+        self.speed = (10,30)
+        self.attack = 20
+        self.attack_timer = 0.8
+        self.exp_reward = 50
+
+    def update(self, dt: float, player: Player) -> int:
+        """プレイヤーを追跡し，攻撃した場合はダメージを返す。"""
+        to_player = pg.Vector2(player.rect.center) - pg.Vector2(self.rect.center)
+        distance = to_player.length()
+
+        if 42 < distance < 250:
+            direction = to_player.normalize()
+            self.rect.x += round(direction.x * self.speed * dt)
+            self.rect.y += round(direction.y * self.speed * dt)
+
+        self.attack_timer -= dt
+        if distance <= 44 and self.attack_timer <= 0:
+            self.attack_timer = 0.85
+            return self.attack
+        return 0
+
+    def draw(self, screen: pg.Surface) -> None:
+        """おにぎり敵とHPバーを描画する。"""
+        pg.draw.ellipse(screen, (54, 44, 64), (self.rect.x, self.rect.bottom - 7, 38, 12))
+
+        # 三角形のおにぎり本体
+        points = [
+            (self.rect.centerx, self.rect.y),
+            (self.rect.right, self.rect.bottom),
+            (self.rect.left, self.rect.bottom),
+            
+        ]
+        pg.draw.polygon(screen, ONIGIRI_BROWN, points)
+        pg.draw.polygon(screen, BLACK, points, 2)
+
+        # のりと目
+        pg.draw.rect(screen, NORI_BLACK, (self.rect.centerx , self.rect.bottom - 1, 3, 4), border_radius=2)
+        pg.draw.circle(screen, BLACK, (self.rect.centerx - 6, self.rect.centery + 2), 2)
+        pg.draw.circle(screen, BLACK, (self.rect.centerx + 6, self.rect.centery + 2), 2)
+
+        # 敵HPバー
+        bar = pg.Rect(self.rect.x, self.rect.y - 10, self.rect.width, 5)
+        pg.draw.rect(screen, UI_DARK, bar)
+        width = int(bar.width * max(0, self.hp) / self.max_hp)
+        pg.draw.rect(screen, HP_RED, (bar.x, bar.y, width, bar.height))   
+
+
 def draw_bar(
     screen: pg.Surface,
     rect: pg.Rect,
@@ -442,9 +550,9 @@ def main() -> None:
     player = Player()
     enemies = [
         OnigiriEnemy((260, 270)),
-        OnigiriEnemy((420, 480)),
+        YakiOnigiriEnemy((420, 480)),
         OnigiriEnemy((680, 335)),
-        OnigiriEnemy((840, 390)),
+        YakiOnigiriEnemy((840, 390)),
         OnigiriEnemy((950, 580)),
     ]
     bullets: list[Bullet] = []
@@ -536,10 +644,13 @@ def main() -> None:
 
                     if player.gain_exp(enemy.exp_reward):
                         texts.append(FloatingText("LEVEL UP!", player.rect.midtop, GUN_YELLOW))
-
                     spawn_x = random.choice([random.randint(80, 600), random.randint(710, 1000)])
                     spawn_y = random.randint(180, 560)
-                    enemies.append(OnigiriEnemy((spawn_x, spawn_y)))
+                    enemy_rispoon_hantei = random.choice((0,1))
+                    if enemy_rispoon_hantei == 0:
+                        enemies.append(OnigiriEnemy((spawn_x, spawn_y)))
+                    elif enemy_rispoon_hantei == 1:
+                        enemies.append(YakiOnigiriEnemy((spawn_x, spawn_y)))
 
             # 時間切れのフローティングメッセージを削除する。
             for text in texts[:]:
