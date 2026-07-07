@@ -101,6 +101,35 @@ class Bullet:
         """弾丸を描画する。"""
         pg.draw.circle(screen, (255, 226, 135), self.pos, self.radius + 2)
         pg.draw.circle(screen, BULLET_ORANGE, self.pos, self.radius)
+#山形が追加したクラス　下
+class GUN:
+    def __init__(self, damage: int, cooldown_time: float, mp_cost: int):
+        self.damage = damage
+        self.cooldown_time = cooldown_time
+        self.mp_cost = mp_cost
+        self.current_cooldown = 0.0
+    
+    def update(self, dt: float):
+        if self.current_cooldown > 0:
+            self.current_cooldown -= dt
+
+    def shoot(self, pos: pg.Vector2, direction: pg.Vector2) -> list[Bullet]:
+      pass
+#下作業中
+class DoubleBarrelShotgun(GUN):
+    def __inint__(self):
+        super().__inint__(damage=15, cooldown_time=1.2, mp_cost=2)
+        self.kakusan = 15#弾丸の拡散角度
+    
+    def shoot(self, pos: pg.Vector2, direction: pg.Vector2) -> list[Bullet]:
+        if self.current_cooldown > 0:
+            return [] # クールダウン中は撃てない
+        
+        self.current_cooldown = self.cooldown_time
+        
+
+
+
 
 
 class Player:
@@ -119,14 +148,18 @@ class Player:
         # READMEに記載する主要ステータス
         self.max_hp = 100
         self.hp = 100
-        self.max_mp = 10  # MPは銃の弾数として使用する。
+        #self.max_mp = 10  # MPは銃の弾数として使用する。
+        self.max_mp = 2
         self.mp = 10
         self.attack = 12
         self.speed = 230
 
+        #ショットガンを持たせる
+        self.equipped_gun = DoubleBarrelShotgun()
+
         # 攻撃，銃，リロードのクールダウン
         self.melee_cooldown = 0.0
-        self.gun_cooldown = 0.0
+        #self.gun_cooldown = 0.0
         self.reload_cooldown = 0.0
 
         # レベルアップ時に習得できる回復スキル
