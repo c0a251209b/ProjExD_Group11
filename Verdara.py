@@ -16,10 +16,8 @@ import os
 import random
 import pygame as pg
 
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-
-# Make relative file paths work regardless of where the program is launched.
+# どの場所から実行しても，相対パスでファイルを読み込めるようにする。
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 WIDTH, HEIGHT = 1100, 700
@@ -58,6 +56,7 @@ class FloatingText:
         self.timer = 0.75
 
     def update(self, dt: float) -> None:
+        # ダメージや報酬のメッセージを上へ移動し，短時間後に削除する。
         self.y -= 32 * dt
         self.timer -= dt
 
@@ -92,20 +91,24 @@ class Player:
         self.potions = 3
 
     def update(self, dt: float, keys: pg.key.ScancodeWrapper) -> None:
+        # Convert keyboard input into one movement vector.
         move = pg.Vector2(
             int(keys[pg.K_d] or keys[pg.K_RIGHT]) - int(keys[pg.K_a] or keys[pg.K_LEFT]),
             int(keys[pg.K_s] or keys[pg.K_DOWN]) - int(keys[pg.K_w] or keys[pg.K_UP]),
         )
 
         if move.length_squared() > 0:
+            # Normalize diagonal movement so it is not faster than horizontal movement.
             move = move.normalize()
             self.direction = move
             self.rect.x += round(move.x * self.speed * dt)
             self.rect.y += round(move.y * self.speed * dt)
 
+        # Keep the player inside the playable area and away from the HUD.
         self.rect.x = int(clamp(self.rect.x, 20, WIDTH - self.rect.width - 20))
         self.rect.y = int(clamp(self.rect.y, 115, HEIGHT - self.rect.height - 88))
 
+        # Count down the cooldowns every frame.
         self.attack_cooldown = max(0.0, self.attack_cooldown - dt)
         self.magic_cooldown = max(0.0, self.magic_cooldown - dt)
 
@@ -119,12 +122,14 @@ class Player:
         return pg.Rect(int(center.x - 28), int(center.y - 28), 56, 56)
 
     def try_melee_attack(self) -> pg.Rect | None:
+        """Return an attack hitbox only when the melee cooldown has finished."""
         if self.attack_cooldown > 0:
             return None
         self.attack_cooldown = 0.35
         return self.melee_area()
 
     def try_fire_orb(self) -> "Projectile | None":
+        """Create a fireball only when enough MP is available and magic is ready."""
         if self.magic_cooldown > 0 or self.mp < 8:
             return None
 
@@ -134,6 +139,7 @@ class Player:
         return Projectile(origin, self.direction, self.magic_attack)
 
     def use_potion(self) -> bool:
+        """Use one potion and return whether HP was actually restored."""
         if self.potions <= 0 or self.hp >= self.max_hp:
             return False
         self.potions -= 1
@@ -193,11 +199,13 @@ class Enemy:
         to_player = pg.Vector2(player.rect.center) - pg.Vector2(self.rect.center)
         distance = to_player.length()
 
+        # Chase only inside the detection range; stop when close enough to attack.
         if 42 < distance < 250:
             direction = to_player.normalize()
             self.rect.x += round(direction.x * self.speed * dt)
             self.rect.y += round(direction.y * self.speed * dt)
 
+        # The timer prevents the enemy from damaging the player
         self.attack_timer -= dt
         if distance <= 44 and self.attack_timer <= 0:
             self.attack_timer = 0.85
@@ -213,7 +221,7 @@ class Enemy:
         pg.draw.circle(screen, BLACK, (self.rect.centerx - 6, self.rect.centery - 1), 2)
         pg.draw.circle(screen, BLACK, (self.rect.centerx + 6, self.rect.centery - 1), 2)
 
-        # Enemy HP bar
+        # 敵のHPバー
         bar = pg.Rect(self.rect.x, self.rect.y - 10, self.rect.width, 5)
         pg.draw.rect(screen, UI_DARK, bar)
         fill_width = int(bar.width * max(0, self.hp) / self.max_hp)
@@ -241,6 +249,7 @@ class Projectile:
         )
 
     def update(self, dt: float) -> None:
+        # Move the projectile forward and reduce its remaining lifetime.
         self.pos += self.direction * self.speed * dt
         self.timer -= dt
 
@@ -258,6 +267,7 @@ def draw_bar(
 ) -> None:
     """Draw a labeled-style bar background and fill."""
     pg.draw.rect(screen, (50, 48, 48), rect, border_radius=5)
+    # Avoid division by zero, then limit the fill length to the bar width.
     ratio = 0 if maximum == 0 else current / maximum
     inner = rect.copy()
     inner.width = int(rect.width * clamp(ratio, 0, 1))
@@ -269,7 +279,7 @@ def draw_world(screen: pg.Surface) -> None:
     """Draw original placeholder terrain using simple shapes."""
     screen.fill(SAND)
 
-    # Ocean
+    # 海
     pg.draw.rect(screen, WATER, (720, 0, WIDTH - 720, 430))
     for y in range(35, 420, 26):
         for x in range(740 + (y % 40), WIDTH, 54):
@@ -283,14 +293,14 @@ def draw_world(screen: pg.Surface) -> None:
         pg.draw.rect(screen, STONE, (x, y, 85, 24), border_radius=5)
         pg.draw.rect(screen, DARK_STONE, (x + 4, y + 7, 77, 13), border_radius=5)
 
-    # Palm-like trees
+    # ヤシの木のような木
     for x, y in [(830, 220), (350, 530), (920, 480)]:
         pg.draw.rect(screen, (97, 65, 36), (x - 7, y - 5, 14, 78), border_radius=5)
         for angle in (0, 72, 144, 216, 288):
             end = pg.Vector2(x, y) + pg.Vector2(46, 0).rotate(angle)
             pg.draw.line(screen, (63, 130, 58), (x, y), end, 13)
 
-    # Portal
+    # ポータル
     pg.draw.ellipse(screen, (75, 49, 140), (560, 490, 72, 92))
     pg.draw.ellipse(screen, (173, 109, 255), (571, 501, 50, 70))
 
@@ -303,7 +313,7 @@ def draw_gui(
     coins: int,
 ) -> None:
     """Draw RPG style status box, hotbar, minimap, and quest box."""
-    # Status panel
+    # ステータスパネル
     panel = pg.Rect(16, 16, 330, 113)
     pg.draw.rect(screen, UI_DARK, panel, border_radius=12)
     pg.draw.rect(screen, UI_LIGHT, panel, 3, border_radius=12)
@@ -328,7 +338,7 @@ def draw_gui(
     screen.blit(hp_text, (158, 57))
     screen.blit(mp_text, (158, 81))
 
-    # Mini-map
+    # ミニマップ
     minimap = pg.Rect(WIDTH - 155, 16, 130, 130)
     pg.draw.ellipse(screen, UI_DARK, minimap)
     pg.draw.ellipse(screen, UI_LIGHT, minimap, 3)
@@ -337,7 +347,7 @@ def draw_gui(
     minimap_label = small_font.render("MIRA BEACH", True, WHITE)
     screen.blit(minimap_label, (WIDTH - 143, 146))
 
-    # Quest box
+    # クエスト表示欄
     quest = pg.Rect(WIDTH - 270, 175, 250, 93)
     pg.draw.rect(screen, UI_DARK, quest, border_radius=10)
     pg.draw.rect(screen, UI_LIGHT, quest, 2, border_radius=10)
@@ -345,7 +355,7 @@ def draw_gui(
     screen.blit(small_font.render("Defeat Shadow Slimes", True, WHITE), (quest.x + 14, quest.y + 39))
     screen.blit(small_font.render("Explore the ancient portal", True, WHITE), (quest.x + 14, quest.y + 63))
 
-    # Bottom hotbar
+    # 画面下部のホットバー
     bar_y = HEIGHT - 78
     pg.draw.rect(screen, UI_DARK, (12, bar_y, WIDTH - 24, 65), border_radius=12)
     pg.draw.rect(screen, UI_LIGHT, (12, bar_y, WIDTH - 24, 65), 3, border_radius=12)
@@ -387,6 +397,7 @@ def main() -> None:
     small_font = pg.font.Font(None, 20)
     large_font = pg.font.Font(None, 56)
 
+    # Create the player and the first set of enemies for the current map.
     player = Player()
     enemies = [
         Enemy((260, 270)),
@@ -402,8 +413,10 @@ def main() -> None:
     running = True
 
     while running:
+        # dt is the elapsed time in seconds, used for frame-rate-independent movement.
         dt = clock.tick(FPS) / 1000
 
+        # 1. Handle window events and keyboard actions.
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 running = False
@@ -430,6 +443,7 @@ def main() -> None:
                 running = False
 
         if not game_over:
+            # 2. Update all game state while the player is alive.
             keys = pg.key.get_pressed()
             player.update(dt, keys)
 
@@ -464,6 +478,7 @@ def main() -> None:
                     if player.gain_exp(enemy.exp_reward):
                         texts.append(FloatingText("LEVEL UP!", player.rect.midtop, (255, 226, 80)))
 
+                    # Spawn a replacement enemy so combat remains available.
                     spawn_x = random.choice([random.randint(80, 600), random.randint(710, 1000)])
                     spawn_y = random.randint(180, 560)
                     enemies.append(Enemy((spawn_x, spawn_y)))
@@ -477,6 +492,7 @@ def main() -> None:
                 player.hp = 0
                 game_over = True
 
+        # 3. Draw the world, characters, effects, and interface.
         draw_world(screen)
 
         # Draw order: objects lower on screen are drawn later to create simple depth.
