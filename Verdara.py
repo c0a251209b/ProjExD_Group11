@@ -27,6 +27,7 @@ WIDTH, HEIGHT = 1100, 700
 FPS = 60
 TITLE = "title" #タイトル
 PLAYING = "playing" #プレイ中
+VICTORY = "victory" # 勝利画面
 
 # 色の定義
 SAND = (231, 211, 151)
@@ -853,6 +854,27 @@ def draw_title_screen(screen: pg.Surface, title_img: pg.Surface,) -> None:
     # 画像はmain()内でWIDTH × HEIGHTに拡大している。
     screen.blit(title_img, (0, 0))
 
+def draw_victory_screen(screen: pg.Surface, font: pg.font.Font, large_font: pg.font.Font, stage_number: int,) -> None:
+    """ボス撃破後の勝利画面を表示する。"""
+    overlay = pg.Surface((WIDTH, HEIGHT), pg.SRCALPHA)
+    overlay.fill((0, 0, 0, 190))
+    screen.blit(overlay, (0, 0))
+
+    title = large_font.render("STAGE CLEAR!", True, GUN_YELLOW)
+    message = font.render(
+        f"Stage {stage_number} cleared. Moving to next world...",
+        True,
+        WHITE,
+    )
+
+    screen.blit(
+        title,
+        title.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 35)),
+    )
+    screen.blit(
+        message,
+        message.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 25)),
+    )
 
 def main() -> None:
     """ゲームを初期化し，メインループを実行する。"""
@@ -861,9 +883,20 @@ def main() -> None:
     screen = pg.display.set_mode((WIDTH, HEIGHT))
     clock = pg.time.Clock()
 
-    # 背景画像を読み込み，ゲーム画面の大きさに合わせる。
-    bg_img = pg.image.load("fig/Stage1.png").convert()
-    bg_img = pg.transform.scale(bg_img, (WIDTH, HEIGHT))
+    # ステージごとの背景画像を読み込み，ゲーム画面の大きさに合わせる。
+    stage_images = [
+        pg.transform.scale(
+            pg.image.load("fig/Stage1.png").convert(),
+            (WIDTH, HEIGHT),
+        ),
+        pg.transform.scale(
+            pg.image.load("fig/Stage2.png").convert(),
+            (WIDTH, HEIGHT),
+        ),
+    ]
+
+    # 現在表示する背景画像
+    bg_img = stage_images[0]
 
     font = pg.font.Font(None, 27)
     small_font = pg.font.Font(None, 20)
@@ -888,7 +921,13 @@ def main() -> None:
     bullets: list[Bullet] = []
     enemy_bullets: list[Bullet] = [] #敵の弾
     texts: list[FloatingText] = []
+
     defeated_count = 0
+    
+    # ステージと勝利画面の管理
+    stage_number = 1
+    victory_timer = 0.0
+
     game_over = False
     game_state = TITLE
     boss_spawned = False # ボスが出現したかどうかを確認するフラグ
@@ -950,16 +989,43 @@ def main() -> None:
 
 
 
-                        # Lキー：回復スキル
-                        if event.key == pg.K_l:
-                            if player.use_heal_skill():
-                                texts.append(
-                                    FloatingText(
-                                        "+35 HP",
-                                        player.rect.midtop,
-                                        (125, 255, 150),
-                                    )
+                    # Lキー：回復スキル
+                    elif event.key == pg.K_l:
+                        if player.use_heal_skill():
+                            texts.append(
+                                FloatingText(
+                                    "+35 HP",
+                                    player.rect.midtop,
+                                    (125, 255, 150),
                                 )
+                            )
+
+                        elif not player.heal_skill:
+                            texts.append(
+                                FloatingText(
+                                    "Heal Skill Locked",
+                                    player.rect.midtop,
+                                    GUN_YELLOW,
+                                )
+                            )
+
+                        elif player.hp >= player.max_hp:
+                            texts.append(
+                                FloatingText(
+                                    "HP Full",
+                                    player.rect.midtop,
+                                    WHITE,
+                                )
+                            )
+
+                        elif player.heal_cooldown > 0:
+                            texts.append(
+                                FloatingText(
+                                    "Heal Cooldown",
+                                    player.rect.midtop,
+                                    MP_BLUE,
+                                )
+                            )
                     else:
                         # Kキー：近接攻撃
                         if event.key == pg.K_k:
@@ -985,9 +1051,20 @@ def main() -> None:
             player.update(dt, keys)
             #ボスの出現処理
             if boss_spawning:
-                boss_spawn_timer -= dt 
+                boss_spawn_timer -= dt
+
                 if boss_spawn_timer <= 0:
-                    enemies.append(OnigiriBoss1((550, 350)))
+                    # ステージ番号によって出現するボスを変える。
+                    if stage_number == 1:
+                        enemies.append(OnigiriBoss1((550, 350)))
+
+                    elif stage_number == 2:
+                        enemies.append(OnigiriBoss2((550, 350)))
+
+                    else:
+                        # 3ステージ目以降はボス2を出す。
+                        enemies.append(OnigiriBoss2((550, 350)))
+
                     boss_spawning = False
                     boss_spawned = True
             # 敵の移動と攻撃
@@ -1124,17 +1201,37 @@ def main() -> None:
                     defeated_count += 1
                     texts.append(FloatingText(f"+{enemy.exp_reward} EXP", enemy.rect.midtop, EXP_GREEN))
 
+                    # ボスを倒したら勝利画面へ移動する。
+                    if isinstance(enemy, (OnigiriBoss1, OnigiriBoss2)):
+                        game_state = VICTORY
+                        victory_timer = 2.0
+                        enemy_bullets.clear()
+                        bullets.clear()
+                        texts.clear()
+                        continue
+
                     if player.gain_exp(enemy.exp_reward):
                         texts.append(FloatingText("LEVEL UP!", player.rect.midtop, GUN_YELLOW))
-                    spawn_x = random.choice([random.randint(80, 600), random.randint(710, 1000)])
-                    spawn_y = random.randint(180, 560)
-                    enemies.append(OnigiriEnemy((spawn_x, spawn_y)))
-                    #10体倒したらボスを出現させる(仮)
+                    # 10体倒したらボスを出現させる。
                     if defeated_count >= 10 and not boss_spawned and not boss_spawning:
                         boss_spawning = True
                         boss_spawn_timer = 2.0  # ボス出現までのカウントダウンを3秒に設定
                         enemies.clear()  # 既存の敵をすべて削除する
                         texts.append(FloatingText("BOSS APPEARS!", (WIDTH//2, HEIGHT//2), HP_RED)) #警告文
+                    else:
+                        spawn_x = random.choice(
+                            [random.randint(80, 600), random.randint(710, 1000)]
+                        )
+                        spawn_y = random.randint(180, 560)
+
+                        enemy_rispoon_hantei = random.choice((0, 1, 2))
+
+                        if enemy_rispoon_hantei == 0:
+                            enemies.append(OnigiriEnemy((spawn_x, spawn_y)))
+                        elif enemy_rispoon_hantei == 1:
+                            enemies.append(YakiOnigiriEnemy((spawn_x, spawn_y)))
+                        elif enemy_rispoon_hantei == 2:
+                            enemies.append(OmuraisuEnemy((spawn_x, spawn_y)))
                         
                     # エネミーをランダムで生成するための判定用変数
                     enemy_rispoon_hantei = random.choice((0,1,2))
@@ -1155,6 +1252,47 @@ def main() -> None:
             if player.hp <= 0:
                 player.hp = 0
                 game_over = True
+
+        # 勝利画面を一定時間表示した後，次のステージへ移動する。
+        if game_state == VICTORY:
+            victory_timer -= dt
+
+            if victory_timer <= 0:
+                stage_number += 1
+                game_state = PLAYING
+
+                # ステージ番号に合わせて背景画像を変更する。
+                stage_index = min(stage_number - 1, len(stage_images) - 1)
+                bg_img = stage_images[stage_index]
+
+                # 次ステージ用に状態をリセットする。
+                defeated_count = 0
+                boss_spawned = False
+                boss_spawning = False
+                boss_spawn_timer = 0.0
+                game_over = False
+
+                # プレイヤーを次ステージの開始位置へ移動する。
+                player.rect.center = (WIDTH // 2, HEIGHT - 140)
+                player.hp = player.max_hp
+                player.mp = 10
+
+                # 弾とメッセージを消す。
+                bullets.clear()
+                enemy_bullets.clear()
+                texts.clear()
+
+                # 次ステージの敵を再配置する。
+                enemies.clear()
+                enemies.extend(
+                    [
+                        OnigiriEnemy((220, 220)),
+                        YakiOnigiriEnemy((420, 300)),
+                        OmuraisuEnemy((720, 260)),
+                        YakiOnigiriEnemy((880, 430)),
+                        OnigiriEnemy((550, 520)),
+                    ]
+                )
 
         # 3. ワールド，オブジェクト，GUIを描画する。
         draw_world(screen, bg_img)
@@ -1194,7 +1332,8 @@ def main() -> None:
         # 最後に描画することで，背景・敵・GUIを完全に隠す。
         if game_state == TITLE:
             draw_title_screen(screen, title_img)
-            
+        if game_state == VICTORY:
+            draw_victory_screen(screen, font, large_font, stage_number,)    
         pg.display.update()
 
     pg.quit()
