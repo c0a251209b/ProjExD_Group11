@@ -117,8 +117,8 @@ class GUN:
       pass
 #下作業中
 class DoubleBarrelShotgun(GUN):
-    def __inint__(self):
-        super().__inint__(damage=15, cooldown_time=1.2, mp_cost=2)
+    def __init__(self):
+        super().__init__(damage=15, cooldown_time=1.2, mp_cost=2)
         self.kakusan = 15#弾丸の拡散角度
     
     def shoot(self, pos: pg.Vector2, direction: pg.Vector2) -> list[Bullet]:
@@ -127,6 +127,15 @@ class DoubleBarrelShotgun(GUN):
         
         self.current_cooldown = self.cooldown_time
         
+        # 基準の方向から kakusan の角度分だけ左右にずらす
+        dir1 = direction.rotate(self.kakusan)
+        dir2 = direction.rotate(-self.kakusan)
+
+        # ずらした方向で2発の弾を生成
+        bullet1 = Bullet(pos, dir1, self.damage)
+        bullet2 = Bullet(pos, dir2, self.damage)
+
+        return [bullet1, bullet2]
 
 
 
