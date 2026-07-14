@@ -15,10 +15,7 @@ ESC             : 終了
 
 import os
 import random
-
 import pygame as pg
-
-import math
 
 # どの場所から実行しても，相対パスでファイルを読み込めるようにする。
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -52,7 +49,6 @@ NORI_BLACK = (40, 45, 45)
 BULLET_ORANGE = (250, 154, 48)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-
 
 def clamp(value: float, low: float, high: float) -> float:
     """valueをlow以上high以下の範囲に収めて返す。"""
@@ -109,7 +105,8 @@ class Bullet:
         """弾丸を描画する。"""
         pg.draw.circle(screen, (255, 226, 135), self.pos, self.radius + 2)
         pg.draw.circle(screen, BULLET_ORANGE, self.pos, self.radius)
-#山形が追加したクラス　下
+
+
 class GUN:
     # 引数に max_ammo: int を追加して受け取れるようにする
     def __init__(self, damage: int, cooldown_time: float, mp_cost: int, max_ammo: int):
@@ -129,7 +126,8 @@ class GUN:
 
     def shoot(self, pos: pg.Vector2, direction: pg.Vector2) -> list[Bullet]:
         pass
-#下作業中
+
+
 class DoubleBarrelShotgun(GUN):
     def __init__(self):
         super().__init__(damage=30, cooldown_time=0.4, mp_cost=2,max_ammo=4)
@@ -150,7 +148,8 @@ class DoubleBarrelShotgun(GUN):
         bullet2 = Bullet(pos, dir2, self.damage)
 
         return [bullet1, bullet2]
-#7/14かついか実装中
+
+
 class AssaultRifle(GUN):
     def __init__(self):
         # ダメージ, クールダウン, 消費MP1
@@ -165,8 +164,6 @@ class AssaultRifle(GUN):
         # まっすぐ1発だけ生成してリストで返す
         bullet = Bullet(pos, direction, self.damage)
         return [bullet]
-
-
 
 
 class Player:
@@ -354,7 +351,6 @@ class Player:
         pg.draw.line(screen, WHITE, self.rect.center, tip, 3)
 
 
-
 class OnigiriEnemy:
     """プレイヤーを追跡して攻撃するおにぎり型の敵クラス。"""
 
@@ -510,6 +506,8 @@ class OnigiriBoss1(OnigiriEnemy):
         pg.draw.rect(screen, UI_DARK, bar)
         width = int(bar.width * max(0, self.hp) / self.max_hp)
         pg.draw.rect(screen, HP_RED, (bar.x, bar.y, width, bar.height))
+
+
 class YakiOnigiriEnemy(OnigiriEnemy):
     """
     プレイヤーを追跡して攻撃する焼おにぎり型の敵クラス。
@@ -558,8 +556,6 @@ class YakiOnigiriEnemy(OnigiriEnemy):
         pg.draw.rect(screen, UI_DARK, bar)
         width = int(bar.width * max(0, self.hp) / self.max_hp)
         pg.draw.rect(screen, HP_RED, (bar.x, bar.y, width, bar.height))
-
-
 
 
 class OnigiriBoss2(OnigiriEnemy):
@@ -694,6 +690,8 @@ class OnigiriBoss2(OnigiriEnemy):
         pg.draw.polygon(screen, (255, 90, 90), tail)    
         # のりと目
         pg.draw.rect(screen, NORI_BLACK, (self.rect.centerx - 15, self.rect.bottom - 28, 30, 24), border_radius=2)
+
+
 class OmuraisuEnemy(OnigiriEnemy):
     """
     プレイヤーを追跡して攻撃するオムライス型の敵クラス。
@@ -1411,9 +1409,7 @@ def main() -> None:
         if game_state == VICTORY:
             draw_victory_screen(screen, font, large_font, stage_number,)    
         pg.display.update()
-
     pg.quit()
-
 
 if __name__ == "__main__":
     main()
