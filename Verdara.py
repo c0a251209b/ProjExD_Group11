@@ -154,7 +154,7 @@ class DoubleBarrelShotgun(GUN):
 class AssaultRifle(GUN):
     def __init__(self):
         # ダメージ, クールダウン, 消費MP1
-        super().__init__(damage=6, cooldown_time=0.12, mp_cost=1, max_ammo=30)
+        super().__init__(damage=12, cooldown_time=0.12, mp_cost=1, max_ammo=30)
     
     def shoot(self, pos: pg.Vector2, direction: pg.Vector2) -> list[Bullet]:
         if self.current_cooldown > 0:
