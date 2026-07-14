@@ -103,10 +103,16 @@ class Bullet:
         pg.draw.circle(screen, BULLET_ORANGE, self.pos, self.radius)
 #山形が追加したクラス　下
 class GUN:
-    def __init__(self, damage: int, cooldown_time: float, mp_cost: int):
+    # 引数に max_ammo: int を追加して受け取れるようにする
+    def __init__(self, damage: int, cooldown_time: float, mp_cost: int, max_ammo: int):
         self.damage = damage
         self.cooldown_time = cooldown_time
         self.mp_cost = mp_cost
+        
+        # 追加：最大弾数と現在の弾数を設定する
+        self.max_ammo = max_ammo
+        self.current_ammo = max_ammo  # 最初は弾が満タンの状態
+        
         self.current_cooldown = 0.0
     
     def update(self, dt: float):
@@ -114,11 +120,11 @@ class GUN:
             self.current_cooldown -= dt
 
     def shoot(self, pos: pg.Vector2, direction: pg.Vector2) -> list[Bullet]:
-      pass
+        pass
 #下作業中
 class DoubleBarrelShotgun(GUN):
     def __init__(self):
-        super().__init__(damage=15, cooldown_time=1.2, mp_cost=2)
+        super().__init__(damage=30, cooldown_time=0.4, mp_cost=2,max_ammo=4)
         self.kakusan = 15#弾丸の拡散角度
     
     def shoot(self, pos: pg.Vector2, direction: pg.Vector2) -> list[Bullet]:
@@ -136,7 +142,21 @@ class DoubleBarrelShotgun(GUN):
         bullet2 = Bullet(pos, dir2, self.damage)
 
         return [bullet1, bullet2]
-
+#7/14かついか実装中
+class AssaultRifle(GUN):
+    def __init__(self):
+        # ダメージ, クールダウン, 消費MP1
+        super().__init__(damage=6, cooldown_time=0.12, mp_cost=1, max_ammo=30)
+    
+    def shoot(self, pos: pg.Vector2, direction: pg.Vector2) -> list[Bullet]:
+        if self.current_cooldown > 0:
+            return []  # クールダウン中は撃てない
+        
+        self.current_cooldown = self.cooldown_time
+        
+        # まっすぐ1発だけ生成してリストで返す
+        bullet = Bullet(pos, direction, self.damage)
+        return [bullet]
 
 
 
@@ -158,13 +178,14 @@ class Player:
         self.max_hp = 100
         self.hp = 100
         #self.max_mp = 10  # MPは銃の弾数として使用する。
-        self.max_mp = 2
-        self.mp = 10
         self.attack = 12
         self.speed = 230
 
         #ショットガンを持たせる
-        self.equipped_gun = DoubleBarrelShotgun()
+ # シューティングに関する設定（古いコードを以下に置き換え）
+        self.weapons = [DoubleBarrelShotgun(), AssaultRifle()]
+        self.weapon_index = 0
+        self.equipped_gun = self.weapons[self.weapon_index]
 
         # 攻撃，銃，リロードのクールダウン
         self.melee_cooldown = 0.0
@@ -194,7 +215,7 @@ class Player:
         self.rect.y = int(clamp(self.rect.y, 120, HEIGHT - self.rect.height - 85))
 
         self.melee_cooldown = max(0.0, self.melee_cooldown - dt)
-        self.gun_cooldown = max(0.0, self.gun_cooldown - dt)
+        self.equipped_gun.update(dt)
         self.reload_cooldown = max(0.0, self.reload_cooldown - dt)
         self.heal_cooldown = max(0.0, self.heal_cooldown - dt)
 
@@ -210,21 +231,28 @@ class Player:
         self.melee_cooldown = 0.35
         return self.melee_area()
 
-    def try_shoot(self) -> Bullet | None:
+    def try_shoot(self) -> list[Bullet]:
         """弾が残っている場合に弾丸を1発生成する。"""
-        if self.gun_cooldown > 0 or self.mp <= 0:
-            return None
+        gun = self.equipped_gun
+        # 銃がクールダウン中、または弾が足りない場合は撃てない
+        if gun.current_cooldown > 0 or gun.current_ammo < gun.mp_cost:
+            return []
 
-        self.mp -= 1
-        self.gun_cooldown = 0.14
+        # 武器の消費MP分だけMPを減らす
+        gun.current_ammo -= gun.mp_cost
+        
+        # 銃口の位置を計算
         origin = pg.Vector2(self.rect.center) + self.direction * 27
-        return Bullet(origin, self.direction, self.attack + 4)
-
+        
+        # 装備している銃から、発射された弾のリストを受け取って返す
+        return gun.shoot(origin, self.direction)
+    
     def reload(self) -> bool:
-        """MPを最大まで回復する。リロードできた場合はTrueを返す。"""
-        if self.reload_cooldown > 0 or self.mp >= self.max_mp:
+        """装備している銃の弾を最大まで回復する。"""
+        gun = self.equipped_gun
+        if self.reload_cooldown > 0 or gun.current_ammo >= gun.max_ammo:
             return False
-        self.mp = self.max_mp
+        gun.current_ammo = gun.max_ammo
         self.reload_cooldown = 1.2
         return True
 
@@ -258,9 +286,11 @@ class Player:
             self.hp = self.max_hp
             result = "HP +20"
         elif choice == 2:
-            self.max_mp += 3
-            self.mp = self.max_mp
-            result = "MP +3"
+            # レベルアップで「MP(Ammo)+3」を選んだら、所持しているすべての武器の上限を増やす
+            for weapon in self.weapons:
+                weapon.max_ammo += 3
+                weapon.current_ammo = weapon.max_ammo
+            result = "Ammo Capacity +3"
         elif choice == 3:
             self.attack += 4
             result = "Attack +4"
@@ -275,7 +305,14 @@ class Player:
 
         self.choosing_level_up = False
         return result
-
+    def switch_weapon(self) -> str:
+        """武器を切り替えて、切り替えた武器の名前を返す。"""
+        self.weapon_index = (self.weapon_index + 1) % len(self.weapons)
+        self.equipped_gun = self.weapons[self.weapon_index]
+        
+        if isinstance(self.equipped_gun, DoubleBarrelShotgun):
+            return "Shotgun"
+        return "Assault Rifle"
     def draw(self, screen: pg.Surface) -> None:
         """プレイヤーを描画する。"""
         pg.draw.ellipse(screen, (55, 55, 55), (self.rect.x - 2, self.rect.bottom - 9, 38, 13))
@@ -409,12 +446,12 @@ def draw_gui(
     mp_bar = pg.Rect(panel.x + 14, panel.y + 73, 260, 17)
     exp_bar = pg.Rect(panel.x + 14, panel.y + 99, 260, 12)
     draw_bar(screen, hp_bar, player.hp, player.max_hp, HP_RED)
-    draw_bar(screen, mp_bar, player.mp, player.max_mp, MP_BLUE)
+    draw_bar(screen, mp_bar, player.equipped_gun.current_ammo, player.equipped_gun.max_ammo, MP_BLUE)
     draw_bar(screen, exp_bar, player.exp, player.exp_to_next, EXP_GREEN)
 
     screen.blit(small_font.render(f"HP {int(player.hp)}/{player.max_hp}", True, WHITE), (panel.x + 20, panel.y + 47))
     screen.blit(
-        small_font.render(f"MP (Ammo) {int(player.mp)}/{player.max_mp}", True, WHITE),
+        small_font.render(f"Ammo {int(player.equipped_gun.current_ammo)}/{player.equipped_gun.max_ammo}", True, WHITE),
         (panel.x + 20, panel.y + 73),
     )
 
@@ -429,12 +466,16 @@ def draw_gui(
     screen.blit(small_font.render(skill_text, True, WHITE), (panel.x + 14, panel.y + 150))
 
     # 右下：銃の種類と弾数
+# 右下：銃の種類と弾数
+    gun_panel = pg.Rect(WIDTH - 300, HEIGHT - 92, 284, 76)
     gun_panel = pg.Rect(WIDTH - 300, HEIGHT - 92, 284, 76)
     pg.draw.rect(screen, UI_DARK, gun_panel, border_radius=12)
     pg.draw.rect(screen, UI_LIGHT, gun_panel, 2, border_radius=12)
-    screen.blit(font.render("Gun: Verdara Pistol", True, WHITE), (gun_panel.x + 14, gun_panel.y + 10))
+    
+    gun_name = "Double-Barrel Shotgun" if isinstance(player.equipped_gun, DoubleBarrelShotgun) else "Assault Rifle"
+    screen.blit(font.render(f"Gun: {gun_name}", True, WHITE), (gun_panel.x + 14, gun_panel.y + 10))
     ammo_text = small_font.render(
-        f"Ammo: {int(player.mp)} / {player.max_mp}    [J] Shoot   [R] Reload",
+        f"Ammo: {int(player.equipped_gun.current_ammo)} / {player.equipped_gun.max_ammo}    [J] Shoot   [R] Reload",
         True,
         GUN_YELLOW,
     )
@@ -526,16 +567,22 @@ def main() -> None:
 
                     # Jキー：銃を撃つ
                     elif event.key == pg.K_j:
-                        bullet = player.try_shoot()
-                        if bullet:
-                            bullets.append(bullet)
+                        new_bullets = player.try_shoot()
+                        if new_bullets:
+                            # 複数の弾のリストが返ってくるため、extendで追加する
+                            bullets.extend(new_bullets)
                         else:
-                            texts.append(FloatingText("No Ammo", player.rect.midtop, MP_BLUE))
+                            if player.equipped_gun.current_ammo < player.equipped_gun.mp_cost:
+                                texts.append(FloatingText("No Ammo", player.rect.midtop, MP_BLUE))
 
                     # Rキー：リロード
                     elif event.key == pg.K_r:
                         if player.reload():
                             texts.append(FloatingText("Reloaded", player.rect.midtop, MP_BLUE))
+                    # Qキー：武器切り替え
+                    elif event.key == pg.K_q:
+                        weapon_name = player.switch_weapon()
+                        texts.append(FloatingText(f"Equipped: {weapon_name}", player.rect.midtop, GUN_YELLOW))                            
 
                     # Lキー：習得後の回復スキル
                     elif event.key == pg.K_l:
