@@ -18,6 +18,7 @@ import random
 
 import pygame as pg
 
+import math
 
 # どの場所から実行しても，相対パスでファイルを読み込めるようにする。
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -324,6 +325,250 @@ class OnigiriEnemy:
         pg.draw.rect(screen, HP_RED, (bar.x, bar.y, width, bar.height))
 
 
+class OnigiriBoss1(OnigiriEnemy):
+    """
+    おにぎりのボス1
+    """
+    def __init__(self, pos: tuple[int, int]) -> None:
+        super().__init__(pos)
+        #ボスのサイズは大きくする
+        self.rect = pg.Rect(pos[0], pos[1], 100, 100)
+        
+        self.max_hp = 200
+        self.hp = self.max_hp
+        self.speed = 60
+        self.attack = 15
+        self.exp_reward = 150
+        
+        self.shot_cooldown = 2.0
+        self.attack_mode = 0  # 0: 単発攻撃, 1: V字型攻撃
+        self.burst_count = 0 #連射用
+        self.burst_timer = 0.0
+        self.burst_type = 0 #1: 単発, 2:V字
+    
+    def update(self, dt: float, player: Player) -> int:
+        """
+        特殊な動き(弾を撃つ)を実装
+        """
+        damage = super().update(dt, player)
+        
+        self.shot_cooldown -= dt
+        
+        if self.burst_count > 0:
+            self.burst_timer -= dt
+        
+        return damage
+    
+    def shoot(self, player: Player) -> Bullet | None:
+        """
+        プレイヤーの方向に弾を撃ちます。
+        """
+        direction = pg.Vector2(player.rect.center) - pg.Vector2(self.rect.center)
+        #プレイヤーとボスが完全に重なったときのエラー対策
+        if direction.length_squared() == 0:
+            direction = pg.Vector2(0, 1)
+        else:
+            direction = direction.normalize()
+        origin = pg.Vector2(self.rect.center)
+        return Bullet(origin, direction, 15)
+    
+    def shoot_v(self, player: Player) -> list[Bullet]:
+        """
+        V字型に弾を撃つ
+        """
+        direction = pg.Vector2(player.rect.center) - pg.Vector2(self.rect.center)
+
+        if direction.length_squared() == 0:
+            direction = pg.Vector2(0, 1)
+        else:
+            direction = direction.normalize()
+
+        bullets = []
+
+        for angle in (-20, 20):
+            new_dir = direction.rotate(angle)
+            bullets.append(
+                Bullet(
+                    pg.Vector2(self.rect.center),
+                    new_dir,
+                    15
+                )
+            )
+
+        return bullets
+        
+    def draw(self, screen: pg.Surface) -> None:
+        """
+        ケチャップに染まったおにぎりのボスを描画する。
+        """
+        pg.draw.ellipse(
+            screen,
+            (54, 44, 64),
+            (self.rect.x + 10, self.rect.bottom - 15, 80, 20)
+        )
+        # 三角形のおにぎり本体
+        points = [
+            (self.rect.centerx, self.rect.y),
+            (self.rect.right, self.rect.bottom),
+            (self.rect.left, self.rect.bottom),
+        ]
+        pg.draw.polygon(screen, (210, 70, 60), points)
+        pg.draw.polygon(screen, BLACK, points, 2)
+
+        # のりと目
+        pg.draw.rect(screen, NORI_BLACK, (self.rect.centerx - 15, self.rect.bottom - 28, 30, 24), border_radius=2)
+        pg.draw.circle(screen, BLACK, (self.rect.centerx - 6, self.rect.centery + 2), 2)
+        pg.draw.circle(screen, BLACK, (self.rect.centerx + 6, self.rect.centery + 2), 2)
+
+        # 敵HPバー
+        bar = pg.Rect(self.rect.x, self.rect.y - 10, self.rect.width, 5)
+        pg.draw.rect(screen, UI_DARK, bar)
+        width = int(bar.width * max(0, self.hp) / self.max_hp)
+        pg.draw.rect(screen, HP_RED, (bar.x, bar.y, width, bar.height))
+
+
+
+
+class OnigiriBoss2(OnigiriEnemy):
+    """
+    おにぎりのボス2
+    """
+    def __init__(self, pos: tuple[int, int]) -> None:
+        super().__init__(pos)
+        self.rect = pg.Rect(pos[0], pos[1], 100, 100)
+        
+        self.max_hp = 300
+        self.hp = self.max_hp
+        self.speed = 50
+        self.attack = 20
+        self.exp_reward = 300
+        
+        self.shot_cooldown = 2.0
+        self.attack_mode = 0
+        self.burst_count = 0
+        self.burst_timer = 0.0
+        self.burst_type = 0 # 0:なし, 1:8方向, 2:通常弾
+        
+        self.jump_timer = 3.0      # 次にジャンプするまで
+        self.jumping = False       # ジャンプ中か
+        self.jump_target = None    # 着地点
+        self.dash_red = False
+    
+    def update(self, dt: float, player: Player) -> int:
+        """
+        特殊な動き(弾を撃つ＋高速でこちらにダッシュしてくる)を実装
+        """
+        self.shot_cooldown -= dt
+        if not self.jumping:
+            damage = super().update(dt, player)
+        else:
+            damage = 0
+        self.jump_timer -= dt
+
+        if self.jump_timer <= 0:
+            self.jumping = True
+            self.jump_target = player.rect.center
+            self.jump_timer = 4.0  # 次のジャンプまでの時間をリセット
+            self.dash_red = True
+        if self.jumping:
+            target = pg.Vector2(self.jump_target)
+            direction = target - pg.Vector2(self.rect.center)
+            if direction.length() < 10:
+                self.jumping = False
+                self.dash_red = False
+            else:
+                direction = direction.normalize()
+                self.rect.x += round(direction.x * 500 * dt)
+                self.rect.y += round(direction.y * 500 * dt)
+        if self.burst_count>0:
+            self.burst_timer -= dt
+        
+        return damage
+    
+    def shoot(self, player: Player) -> Bullet | None:
+        """
+        プレイヤーの方向に弾を撃ちます。
+        """
+        direction = pg.Vector2(player.rect.center) - pg.Vector2(self.rect.center)
+        #プレイヤーとボスが完全に重なったときのエラー対策
+        if direction.length_squared() == 0:
+            direction = pg.Vector2(0, 1)
+        else:
+            direction = direction.normalize()
+        origin = pg.Vector2(self.rect.center)
+        return Bullet(origin, direction, 15)
+    
+    def shoot_circle(self) -> list[Bullet]:
+        """
+        8方向へ弾を発射
+        """
+        bullets = []
+
+        for angle in range(0, 360, 45):
+            direction = pg.Vector2(1, 0).rotate(angle)
+            bullets.append(
+                Bullet(
+                    pg.Vector2(self.rect.center),
+                    direction,
+                    18
+                )
+            )
+
+        return bullets
+    
+    def draw(self, screen: pg.Surface) -> None:
+        """
+        海老天を持つボス2を描画する。
+        """
+        pg.draw.ellipse(
+            screen,
+            (54, 44, 64),
+            (self.rect.x + 10, self.rect.bottom - 15, 80, 20)
+        )
+        # 三角形のおにぎり本体
+        points = [
+            (self.rect.centerx, self.rect.y),
+            (self.rect.right, self.rect.bottom),
+            (self.rect.left, self.rect.bottom),
+        ]
+        color = (255, 70, 70) if self.dash_red else ONIGIRI_WHITE
+        pg.draw.polygon(screen, color, points)
+        pg.draw.polygon(screen, BLACK, points, 2)
+        
+        # 海老天
+        pg.draw.ellipse(
+            screen,
+            (255, 130, 40),
+            (self.rect.centerx - 18, self.rect.y + 5, 30, 55)
+        )
+
+        # 衣
+        for dy in (10, 20, 30, 40):
+            pg.draw.circle(
+                screen,
+                (255, 225, 120),
+                (self.rect.centerx , self.rect.y + dy),
+                5
+            )
+
+        # 尻尾
+        tail = [
+            (self.rect.centerx + 15, self.rect.y + 20),
+            (self.rect.centerx + 25, self.rect.y + 13),
+            (self.rect.centerx + 23, self.rect.y + 30),
+        ]
+        
+        pg.draw.polygon(screen, (255, 90, 90), tail)    
+        # のりと目
+        pg.draw.rect(screen, NORI_BLACK, (self.rect.centerx - 15, self.rect.bottom - 28, 30, 24), border_radius=2)
+        pg.draw.circle(screen, BLACK, (self.rect.centerx - 6, self.rect.centery + 2), 2)
+        pg.draw.circle(screen, BLACK, (self.rect.centerx + 6, self.rect.centery + 2), 2)
+
+        # 敵HPバー
+        bar = pg.Rect(self.rect.x, self.rect.y - 10, self.rect.width, 5)
+        pg.draw.rect(screen, UI_DARK, bar)
+        width = int(bar.width * max(0, self.hp) / self.max_hp)
+        pg.draw.rect(screen, HP_RED, (bar.x, bar.y, width, bar.height))
 
 def draw_bar(
     screen: pg.Surface,
@@ -432,7 +677,7 @@ def draw_level_up_menu(screen: pg.Surface, font: pg.font.Font, small_font: pg.fo
     ]
     for index, text in enumerate(choices):
         image = small_font.render(text, True, WHITE)
-        screen.blit(image, image.get_rect(center=(WIDTH // 2, panel.y + 100 + index * 43)))
+        screen.blit(image, image.get_rect(center=(WIDTH // 2, panel.y + 100 + index * 43))) 
 
 
 def draw_title_screen(screen: pg.Surface, title_img: pg.Surface,) -> None:
@@ -456,7 +701,7 @@ def main() -> None:
 
     font = pg.font.Font(None, 27)
     small_font = pg.font.Font(None, 20)
-    
+    large_font = pg.font.Font(None, 64)
     # タイトル画面用の画像を読み込む。
     # convert()により，画面表示を高速化する。
     title_img = pg.image.load("fig/title_screen.png").convert()
@@ -473,10 +718,15 @@ def main() -> None:
         OnigiriEnemy((950, 580)),
     ]
     bullets: list[Bullet] = []
+    enemy_bullets: list[Bullet] = [] #敵の弾
     texts: list[FloatingText] = []
     defeated_count = 0
     game_over = False
     game_state = TITLE
+    boss_spawned = False # ボスが出現したかどうかを確認するフラグ
+    boss_spawning = False # ボス出現の準備中かどうかを確認するフラグ
+    boss_spawn_timer = 0.0 # ボス出現までのカウント
+    
     running = True
 
     while running:
@@ -568,14 +818,112 @@ def main() -> None:
             # 2. プレイヤー，敵，弾丸，メッセージを更新する。
             keys = pg.key.get_pressed()
             player.update(dt, keys)
-
+            #ボスの出現処理
+            if boss_spawning:
+                boss_spawn_timer -= dt 
+                if boss_spawn_timer <= 0:
+                    enemies.append(OnigiriBoss1((550, 350)))
+                    boss_spawning = False
+                    boss_spawned = True
             # 敵の移動と攻撃
             for enemy in enemies:
                 damage = enemy.update(dt, player)
                 if damage:
                     player.hp -= damage
                     texts.append(FloatingText(f"-{damage}", player.rect.midtop, HP_RED))
+                # ボス敵1の攻撃
+                if isinstance(enemy, OnigiriBoss1):
 
+                    # 連射中
+                    if enemy.burst_count > 0:
+
+                        if enemy.burst_timer <= 0:
+
+                            if enemy.burst_type == 1:
+                                # プレイヤー狙い3連射
+                                bullet = enemy.shoot(player)
+                                if bullet:
+                                    enemy_bullets.append(bullet)
+
+                                enemy.burst_timer = 0.1
+
+
+                            elif enemy.burst_type == 2:
+                                # V字3連射
+                                enemy_bullets.extend(enemy.shoot_v(player))
+
+                                enemy.burst_timer = 0.2
+
+
+                            enemy.burst_count -= 1
+
+
+                    # 攻撃開始
+                    elif enemy.shot_cooldown <= 0:
+
+                        if enemy.attack_mode == 0:
+                            # プレイヤー方向3連射
+                            enemy.burst_count = 3
+                            enemy.burst_type = 1
+                            enemy.burst_timer = 0
+
+                            enemy.attack_mode = 1
+                            enemy.shot_cooldown = 2.0
+
+
+                        else:
+                            # V字3連射
+                            enemy.burst_count = 3
+                            enemy.burst_type = 2
+                            enemy.burst_timer = 0
+
+                            enemy.attack_mode = 0
+                            enemy.shot_cooldown = 2.5
+                            
+                # ボス敵2の攻撃
+                if isinstance(enemy, OnigiriBoss2):
+
+                    # 連射中
+                    if enemy.burst_count > 0:
+
+                        if enemy.burst_timer <= 0:
+
+                            # 8方向3連射
+                            if enemy.burst_type == 1:
+                                enemy_bullets.extend(enemy.shoot_circle())
+
+                            # 通常弾5連射
+                            elif enemy.burst_type == 2:
+                                bullet = enemy.shoot(player)
+                                if bullet:
+                                    enemy_bullets.append(bullet)
+
+                            enemy.burst_count -= 1
+                            enemy.burst_timer = 0.1
+
+
+                    # 攻撃開始
+                    elif enemy.shot_cooldown <= 0:
+
+                        if enemy.attack_mode == 0:
+                            # 8方向弾を3連射
+                            enemy.burst_count = 3
+                            enemy.burst_type = 1
+                            enemy.burst_timer = 0
+
+                            enemy.attack_mode = 1
+                            enemy.shot_cooldown = 2.0
+
+
+                        else:
+                            # プレイヤー方向へ5連射
+                            enemy.burst_count = 5
+                            enemy.burst_type = 2
+                            enemy.burst_timer = 0
+
+                            enemy.attack_mode = 0
+                            enemy.shot_cooldown = 3.0
+                                    
             # 弾丸の移動と敵との当たり判定
             for bullet in bullets[:]:
                 bullet.update(dt)
@@ -590,6 +938,19 @@ def main() -> None:
                         if bullet in bullets:
                             bullets.remove(bullet)
                         break
+            #敵の弾の移動と自分の当たり判定
+            for bullet in enemy_bullets[:]:
+                bullet.update(dt)
+
+                if bullet.timer <= 0:
+                    enemy_bullets.remove(bullet)
+                    continue
+
+                if bullet.rect.colliderect(player.rect):
+                    player.hp -= bullet.damage
+                    texts.append(FloatingText(f"-{bullet.damage}", player.rect.midtop, HP_RED))
+                    enemy_bullets.remove(bullet)
+                
 
             # 倒された敵を削除し，経験値を与えて新しい敵を生成する。
             for enemy in enemies[:]:
@@ -604,7 +965,13 @@ def main() -> None:
                     spawn_x = random.choice([random.randint(80, 600), random.randint(710, 1000)])
                     spawn_y = random.randint(180, 560)
                     enemies.append(OnigiriEnemy((spawn_x, spawn_y)))
-
+                    #10体倒したらボスを出現させる(仮)
+                    if defeated_count >= 10 and not boss_spawned and not boss_spawning:
+                        boss_spawning = True
+                        boss_spawn_timer = 2.0  # ボス出現までのカウントダウンを3秒に設定
+                        enemies.clear()  # 既存の敵をすべて削除する
+                        texts.append(FloatingText("BOSS APPEARS!", (WIDTH//2, HEIGHT//2), HP_RED)) #警告文
+                        
             # 時間切れのフローティングメッセージを削除する。
             for text in texts[:]:
                 text.update(dt)
@@ -627,6 +994,9 @@ def main() -> None:
             obj.draw(screen)
 
         for bullet in bullets:
+            bullet.draw(screen)
+        # 敵の弾を描画
+        for bullet in enemy_bullets:
             bullet.draw(screen)
 
         for text in texts:
